@@ -29,7 +29,7 @@ jobs:
           path: ~/.cache/pypoetry
           key: ${{ runner.os }}-poetry-${{ hashFiles('pyproject.toml') }}
       - name: Install Dependencies
-        run: make deps
+        run: make linux_deps
       - name: Run Linter
         run: make lint
       - name: Run Tests

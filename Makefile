@@ -1,4 +1,8 @@
-.PHONY: deps lint shell server server_headless test docker_up docker_down
+.PHONY: linux_deps deps lint shell server server_headless test docker_up docker_down
+
+linux_deps: 
+	sudo apt-get update && sudo apt-get install -y libomp-dev libgomp1
+	poetry install
 
 deps:
 	brew install libomp
