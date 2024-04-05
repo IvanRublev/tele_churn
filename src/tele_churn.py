@@ -64,8 +64,8 @@ def tele_churn_app():
                 > Kostas Diamantaras. (2020). Customer Churn Prediction 2020. Kaggle. https://kaggle.com/competitions/customer-churn-prediction-2020.
                 """)
 
-    churn_stats, csv_tab, engineered_features_tab, correlations_tab = st.tabs(
-        ["Churn Stats", "CSV", "Engineered features", "Correlations"]
+    churn_stats, csv_tab, engineered_features_tab, correlations_tab, x_tab = st.tabs(
+        ["Churn Stats", "CSV", "Engineered features", "Correlations", "X features for model training"]
     )
 
     # Show csv
@@ -97,7 +97,25 @@ def tele_churn_app():
     with correlations_tab:
         st.dataframe(correlations)
 
-    # st.header("📊 Features")
+    st.header("📊 Features")
+
+    # Drop collinear features and target variable
+    dropped_columns = [
+        "churn",
+        "international_plan",
+        "total_day_charge",
+        "total_eve_charge",
+        "total_intl_charge",
+        "total_night_charge",
+    ]
+
+    df = _drop_columns(df, dropped_columns)
+
+    with x_tab:
+        dropped_columns.sort()
+        dropped_columns_str = ", ".join(map(lambda x: f"`{x}`", dropped_columns))
+        st.write(f"The following columns were dropped: {dropped_columns_str}")
+        st.dataframe(df, hide_index=True)
 
 
 @st.cache_data
@@ -148,3 +166,8 @@ def _mean_encode(df, group, target):
 
     mean_encoded = df.groupby(group)[target].mean()
     return df[group].map(mean_encoded)
+
+
+@st.cache_data
+def _drop_columns(df, columns):
+    return df.drop(columns=columns)
