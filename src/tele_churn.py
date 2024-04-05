@@ -1,6 +1,7 @@
 import time
 
 import pandas as pd
+import plotly.express as px
 import itertools
 import numpy as np
 import seaborn as sns
@@ -43,10 +44,15 @@ from xgboost import XGBClassifier
 
 from src.logger import logger
 from src.settings import APP_DESCRIPTION
+from src.settings import DATASET_CSV_PATH
 
 
 def tele_churn_app():
     logger.info("UI loop")
+
+    # Load dataset
+    df = pd.read_csv(DATASET_CSV_PATH)
+    df = df.rename(columns=str.lower)
 
     # Configure UI
     icon = "🪁"
@@ -54,9 +60,75 @@ def tele_churn_app():
 
     st.title(icon + " " + APP_DESCRIPTION)
 
+    # Explore Dataset
     st.header("Dataset")
 
     st.markdown(f"""
                 As an example, we use the Customer Churn Prediction dataset of 4250 records.
                 > Kostas Diamantaras. (2020). Customer Churn Prediction 2020. Kaggle. https://kaggle.com/competitions/customer-churn-prediction-2020.
                 """)
+
+    churn_stats, csv_tab, engineered_features_tab, correlations_tab = st.tabs(
+        ["Churn Stats", "CSV", "Engineered features", "Correlations"]
+    )
+
+    # Show csv
+    with csv_tab:
+        st.dataframe(df, hide_index=True)
+
+    # Calculate churn stats
+    churn_counts = df["churn"].value_counts()
+
+    with churn_stats:
+        fig = px.pie(churn_counts, values="count", names=churn_counts.index, title="Churn Counts")
+        st.plotly_chart(fig, use_container_width=True)
+
+    # Engineer features
+    pd.set_option("future.no_silent_downcasting", True)
+    df["churn"] = df["churn"].replace(("yes", "no"), (1, 0))
+    df["international_plan"] = df["international_plan"].replace(("yes", "no"), (1, 0))
+    df["voice_mail_plan"] = df["voice_mail_plan"].replace(("yes", "no"), (1, 0))
+    df["charge_rate_day"] = _call_charge_rate(df, "total_day_minutes", "total_day_charge")
+    df["charge_rate_night"] = _call_charge_rate(df, "total_night_minutes", "total_night_charge")
+    df["charge_rate_intl"] = _call_charge_rate(df, "total_intl_minutes", "total_intl_charge")
+    df["charge_rate_eve"] = _call_charge_rate(df, "total_eve_minutes", "total_eve_charge")
+    df["mean_encoded_state"] = _mean_encode(df, "state", "churn")
+    df["mean_encoded_international_plan"] = _mean_encode(df, "international_plan", "churn")
+    df["mean_encoded_voice_mail_plan"] = _mean_encode(df, "voice_mail_plan", "churn")
+    df = pd.get_dummies(df, columns=["state", "area_code"])
+
+    with engineered_features_tab:
+        st.dataframe(df, hide_index=True)
+
+    # Correlations
+    correlations = df[df.columns[1:]].corr()["churn"][:].sort_values(ascending=False).to_frame()
+    closeness_interval = 0.0001
+    correlations["collinearity?"] = (
+        (correlations["churn"].shift(-1) - correlations["churn"]).abs() < closeness_interval
+    ) | ((correlations["churn"].shift(+1) - correlations["churn"]).abs() < closeness_interval)
+
+    with correlations_tab:
+        st.dataframe(correlations)
+
+    # st.header("📊 Features")
+
+
+def _call_charge_rate(df, minutes_column, charges_column):
+    return df[charges_column] / df[minutes_column]
+
+
+def _mean_encode(df, group, target):
+    """Group a Pandas DataFrame via a given column and return
+    the mean of the target variable for that grouping.
+    Args:
+        :param df: Pandas DataFrame.
+        :param group: Column to group by.
+        :param target: Target variable column.
+    Returns:
+        Mean for the target variable across the group.
+    Example:
+        df['sector_mean_encoded'] = _mean_encode(df, 'sector', 'converted')
+    """
+
+    mean_encoded = df.groupby(group)[target].mean()
+    return df[group].map(mean_encoded)
