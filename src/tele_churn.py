@@ -50,10 +50,6 @@ from src.settings import DATASET_CSV_PATH
 def tele_churn_app():
     logger.info("UI loop")
 
-    # Load dataset
-    df = pd.read_csv(DATASET_CSV_PATH)
-    df = df.rename(columns=str.lower)
-
     # Configure UI
     icon = "🪁"
     st.set_page_config(page_title=APP_DESCRIPTION, page_icon=icon, layout="wide")
@@ -73,29 +69,20 @@ def tele_churn_app():
     )
 
     # Show csv
+    df = _load_dataset()
+
     with csv_tab:
         st.dataframe(df, hide_index=True)
 
-    # Calculate churn stats
-    churn_counts = df["churn"].value_counts()
+    # Churn stats
+    churn_counts = _churn_counts(df)
 
     with churn_stats:
         fig = px.pie(churn_counts, values="count", names=churn_counts.index, title="Churn Counts")
         st.plotly_chart(fig, use_container_width=True)
 
     # Engineer features
-    pd.set_option("future.no_silent_downcasting", True)
-    df["churn"] = df["churn"].replace(("yes", "no"), (1, 0))
-    df["international_plan"] = df["international_plan"].replace(("yes", "no"), (1, 0))
-    df["voice_mail_plan"] = df["voice_mail_plan"].replace(("yes", "no"), (1, 0))
-    df["charge_rate_day"] = _call_charge_rate(df, "total_day_minutes", "total_day_charge")
-    df["charge_rate_night"] = _call_charge_rate(df, "total_night_minutes", "total_night_charge")
-    df["charge_rate_intl"] = _call_charge_rate(df, "total_intl_minutes", "total_intl_charge")
-    df["charge_rate_eve"] = _call_charge_rate(df, "total_eve_minutes", "total_eve_charge")
-    df["mean_encoded_state"] = _mean_encode(df, "state", "churn")
-    df["mean_encoded_international_plan"] = _mean_encode(df, "international_plan", "churn")
-    df["mean_encoded_voice_mail_plan"] = _mean_encode(df, "voice_mail_plan", "churn")
-    df = pd.get_dummies(df, columns=["state", "area_code"])
+    df = _engineer_features(df)
 
     with engineered_features_tab:
         st.dataframe(df, hide_index=True)
@@ -111,6 +98,35 @@ def tele_churn_app():
         st.dataframe(correlations)
 
     # st.header("📊 Features")
+
+
+@st.cache_data
+def _load_dataset():
+    df = pd.read_csv(DATASET_CSV_PATH)
+    df = df.rename(columns=str.lower)
+    return df
+
+
+@st.cache_data
+def _churn_counts(df):
+    return df["churn"].value_counts()
+
+
+@st.cache_data
+def _engineer_features(df):
+    pd.set_option("future.no_silent_downcasting", True)
+    df["churn"] = df["churn"].replace(("yes", "no"), (1, 0))
+    df["international_plan"] = df["international_plan"].replace(("yes", "no"), (1, 0))
+    df["voice_mail_plan"] = df["voice_mail_plan"].replace(("yes", "no"), (1, 0))
+    df["charge_rate_day"] = _call_charge_rate(df, "total_day_minutes", "total_day_charge")
+    df["charge_rate_night"] = _call_charge_rate(df, "total_night_minutes", "total_night_charge")
+    df["charge_rate_intl"] = _call_charge_rate(df, "total_intl_minutes", "total_intl_charge")
+    df["charge_rate_eve"] = _call_charge_rate(df, "total_eve_minutes", "total_eve_charge")
+    df["mean_encoded_state"] = _mean_encode(df, "state", "churn")
+    df["mean_encoded_international_plan"] = _mean_encode(df, "international_plan", "churn")
+    df["mean_encoded_voice_mail_plan"] = _mean_encode(df, "voice_mail_plan", "churn")
+    df = pd.get_dummies(df, columns=["state", "area_code"])
+    return df
 
 
 def _call_charge_rate(df, minutes_column, charges_column):
