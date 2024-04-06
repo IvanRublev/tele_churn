@@ -28,7 +28,8 @@ import plotly.express as px
 # from sklearn.metrics import roc_auc_score
 # from sklearn.model_selection import cross_val_score
 # from sklearn.model_selection import GridSearchCV
-# from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split
+
 # from sklearn.naive_bayes import BernoulliNB
 # from sklearn.neighbors import KNeighborsClassifier
 # from sklearn.pipeline import Pipeline
@@ -45,6 +46,8 @@ import streamlit as st
 from src.logger import logger
 from src.settings import APP_DESCRIPTION
 from src.settings import DATASET_CSV_PATH
+from src.settings import INTEGER_FORMAT
+from src.settings import PERCENTAGE_FORMAT
 
 
 def tele_churn_app():
@@ -57,7 +60,7 @@ def tele_churn_app():
     st.title(icon + " " + APP_DESCRIPTION)
 
     # Explore Dataset
-    st.header("Dataset")
+    st.header("📚 Dataset")
 
     st.markdown("""
                 As an example, we use the Customer Churn Prediction dataset of 4250 records.
@@ -88,8 +91,8 @@ def tele_churn_app():
         st.dataframe(df, hide_index=True)
 
     # Correlations
-    correlations = df[df.columns[1:]].corr()["churn"][:].sort_values(ascending=False).to_frame()
     closeness_interval = 0.0001
+    correlations = df[df.columns[1:]].corr()["churn"][:].sort_values(ascending=False).to_frame()
     correlations["collinearity?"] = (
         (correlations["churn"].shift(-1) - correlations["churn"]).abs() < closeness_interval
     ) | ((correlations["churn"].shift(+1) - correlations["churn"]).abs() < closeness_interval)
@@ -97,9 +100,9 @@ def tele_churn_app():
     with correlations_tab:
         st.dataframe(correlations)
 
-    st.header("📊 Features")
-
     # Drop collinear features and target variable
+    y = df["churn"]
+
     dropped_columns = [
         "churn",
         "international_plan",
@@ -109,13 +112,43 @@ def tele_churn_app():
         "total_night_charge",
     ]
 
-    df = _drop_columns(df, dropped_columns)
+    X = _drop_columns(df, dropped_columns)
 
     with x_tab:
         dropped_columns.sort()
         dropped_columns_str = ", ".join(map(lambda x: f"`{x}`", dropped_columns))
         st.write(f"The following columns were dropped: {dropped_columns_str}")
-        st.dataframe(df, hide_index=True)
+        st.dataframe(X, hide_index=False)
+
+    st.header("⚽ Model Training")
+
+    # Split dataset
+    ttf, train_Xy, test_Xy, X_train, X_test, y_train, y_test = _split_dataset(X, y)
+
+    split_stats, train_col, test_col = st.columns(3)
+
+    with split_stats:
+        ttf["Percentage"] = ttf["Percentage"].apply(lambda x: PERCENTAGE_FORMAT.format(x))
+        fig = px.bar(
+            ttf,
+            x="Dataset",
+            y="Count",
+            color="Churn",
+            title="Split to Train and Test Datasets",
+            barmode="stack",
+            hover_data=["Dataset", "Churn", "Percentage"],
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    with train_col:
+        train_len_str = INTEGER_FORMAT.format(len(train_Xy))
+        st.subheader(f"Train Set ({train_len_str} records)")
+        st.dataframe(train_Xy, hide_index=False)
+
+    with test_col:
+        test_len_str = INTEGER_FORMAT.format(len(test_Xy))
+        st.subheader(f"Test Set ({test_len_str} records)")
+        st.dataframe(test_Xy, hide_index=False)
 
 
 @st.cache_data
@@ -171,3 +204,34 @@ def _mean_encode(df, group, target):
 @st.cache_data
 def _drop_columns(df, columns):
     return df.drop(columns=columns)
+
+
+@st.cache_data
+def _split_dataset(X, y):
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42, stratify=y)
+
+    train_Xy = X_train.copy()
+    train_Xy["churn"] = y_train
+
+    test_Xy = X_test.copy()
+    test_Xy["churn"] = y_test
+
+    train_churn_counts = train_Xy["churn"].value_counts()
+    test_churn_counts = test_Xy["churn"].value_counts()
+    train_churn_percentages = train_churn_counts / train_churn_counts.sum() * 100
+    test_churn_percentages = test_churn_counts / test_churn_counts.sum() * 100
+
+    data = {
+        "Dataset": ["Train", "Train", "Test", "Test"],
+        "Churn": ["0", "1", "0", "1"],
+        "Count": [train_churn_counts[0], train_churn_counts[1], test_churn_counts[0], test_churn_counts[1]],
+        "Percentage": [
+            train_churn_percentages[0],
+            train_churn_percentages[1],
+            test_churn_percentages[0],
+            test_churn_percentages[1],
+        ],
+    }
+    ttf = pd.DataFrame(data)
+
+    return ttf, train_Xy, test_Xy, X_train, X_test, y_train, y_test

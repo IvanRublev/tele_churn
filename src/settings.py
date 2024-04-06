@@ -17,6 +17,8 @@ PORT: int = int(os.environ["STREAMLIT_SERVER_PORT"])
 # Hardcoded
 
 DATASET_CSV_PATH: str = "dataset/customer_churn_prediction_2020_train.csv"
+INTEGER_FORMAT = "{:,d}"
+PERCENTAGE_FORMAT = "{:.2f}%"
 
 # From pyproject.toml
 
