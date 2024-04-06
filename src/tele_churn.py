@@ -77,7 +77,7 @@ def tele_churn_app():
     )
 
     # Show csv
-    df = _load_dataset()
+    df = _sort_columns(_load_dataset())
 
     with csv_tab:
         st.dataframe(df, hide_index=True)
@@ -90,7 +90,7 @@ def tele_churn_app():
         st.plotly_chart(fig, use_container_width=True)
 
     # Engineer features
-    df = _engineer_features(df)
+    df = _sort_columns(_engineer_features(df))
 
     with engineered_features_tab:
         st.dataframe(df, hide_index=True)
@@ -172,6 +172,11 @@ def _load_dataset():
     df = pd.read_csv(DATASET_CSV_PATH)
     df = df.rename(columns=str.lower)
     return df
+
+
+@st.cache_data
+def _sort_columns(df):
+    return df.sort_index(axis=1)
 
 
 @st.cache_data
