@@ -8,17 +8,20 @@ import plotly.express as px
 # import matplotlib.pyplot as plt
 
 # from catboost import CatBoostClassifier
-# from imblearn.over_sampling import SMOTE
-# from imblearn.pipeline import Pipeline as imbpipeline
+from imblearn.over_sampling import SMOTE
+from imblearn.pipeline import Pipeline as imbpipeline
+
 # from lightgbm import LGBMClassifier
-# from sklearn.compose import ColumnTransformer
+from sklearn.compose import ColumnTransformer
+
 # from sklearn.dummy import DummyClassifier
 # from sklearn.ensemble import AdaBoostClassifier
 # from sklearn.ensemble import BaggingClassifier
 # from sklearn.ensemble import ExtraTreesClassifier
 # from sklearn.ensemble import RandomForestClassifier
 # from sklearn.ensemble import VotingClassifier
-# from sklearn.impute import SimpleImputer
+from sklearn.impute import SimpleImputer
+
 # from sklearn.linear_model import RidgeClassifier
 # from sklearn.linear_model import SGDClassifier
 # from sklearn.metrics import accuracy_score
@@ -33,8 +36,9 @@ from sklearn.model_selection import train_test_split
 # from sklearn.naive_bayes import BernoulliNB
 # from sklearn.neighbors import KNeighborsClassifier
 # from sklearn.pipeline import Pipeline
-# from sklearn.preprocessing import MinMaxScaler
-# from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import OneHotEncoder
+
 # from sklearn.preprocessing import OrdinalEncoder
 # from sklearn.preprocessing import StandardScaler
 # from sklearn.svm import SVC
@@ -46,6 +50,7 @@ import streamlit as st
 from src.logger import logger
 from src.settings import APP_DESCRIPTION
 from src.settings import DATASET_CSV_PATH
+from src.settings import INTEGER_GROUPING_SYMBOL
 from src.settings import INTEGER_FORMAT
 from src.settings import PERCENTAGE_FORMAT
 
@@ -91,11 +96,7 @@ def tele_churn_app():
         st.dataframe(df, hide_index=True)
 
     # Correlations
-    closeness_interval = 0.0001
-    correlations = df[df.columns[1:]].corr()["churn"][:].sort_values(ascending=False).to_frame()
-    correlations["collinearity?"] = (
-        (correlations["churn"].shift(-1) - correlations["churn"]).abs() < closeness_interval
-    ) | ((correlations["churn"].shift(+1) - correlations["churn"]).abs() < closeness_interval)
+    correlations = _correlations(df, closeness_interval=0.0001)
 
     with correlations_tab:
         st.dataframe(correlations)
@@ -138,6 +139,7 @@ def tele_churn_app():
             barmode="stack",
             hover_data=["Dataset", "Churn", "Percentage"],
         )
+        fig.update_yaxes(tickformat=INTEGER_GROUPING_SYMBOL)
         st.plotly_chart(fig, use_container_width=True)
 
     with train_col:
@@ -149,6 +151,20 @@ def tele_churn_app():
         test_len_str = INTEGER_FORMAT.format(len(test_Xy))
         st.subheader(f"Test Set ({test_len_str} records)")
         st.dataframe(test_Xy, hide_index=False)
+
+    st.markdown("""
+            In the pipeline we use the following to preprocess the input dataset:
+            * [SimpleImputer][SimpleImputer] to fill missing values
+            * [OneHotEncoder][OneHotEncoder] to encode categorical features with automatic categories detection
+            * [SMOTE][SMOTE] to balance the dataset
+            * [MinMaxScaler][MinMaxScaler] to normalize numerical features in range `0..1`
+                
+            [SimpleImputer]: https://scikit-learn.org/stable/modules/generated/sklearn.impute.SimpleImputer.html
+            [OneHotEncoder]: https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.OneHotEncoder.html
+            [SMOTE]: https://imbalanced-learn.org/stable/references/generated/imblearn.over_sampling.SMOTE.html
+            [MinMaxScaler]: https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.MinMaxScaler.html
+            """)
+    # _normalized_input_pipeline()
 
 
 @st.cache_data
@@ -202,6 +218,16 @@ def _mean_encode(df, group, target):
 
 
 @st.cache_data
+def _correlations(df, closeness_interval):
+    closeness_interval = 0.0001
+    correlations = df[df.columns[1:]].corr()["churn"][:].sort_values(ascending=False).to_frame()
+    correlations["collinearity?"] = (
+        (correlations["churn"].shift(-1) - correlations["churn"]).abs() < closeness_interval
+    ) | ((correlations["churn"].shift(+1) - correlations["churn"]).abs() < closeness_interval)
+    return correlations
+
+
+@st.cache_data
 def _drop_columns(df, columns):
     return df.drop(columns=columns)
 
@@ -235,3 +261,40 @@ def _split_dataset(X, y):
     ttf = pd.DataFrame(data)
 
     return ttf, train_Xy, test_Xy, X_train, X_test, y_train, y_test
+
+
+@st.cache_data
+def _normalized_input_pipeline(X, model):
+    """Return a pipeline to normalize numerical and categorical data bundled together with a given model.
+
+    Args:
+        X (object): X_train data.
+        model (object): scikit-learn model object, i.e. XGBClassifier
+
+    Returns:
+        Pipeline (object): Pipeline steps.
+    """
+
+    numeric_columns = list(X.select_dtypes(exclude=["object"]).columns.values.tolist())
+    categorical_columns = list(X.select_dtypes(include=["object"]).columns.values.tolist())
+    numeric_pipeline = SimpleImputer(strategy="constant")
+    categorical_pipeline = OneHotEncoder(handle_unknown="error")  # ignore
+
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ("numeric", numeric_pipeline, numeric_columns),
+            ("categorical", categorical_pipeline, categorical_columns),
+        ],
+        remainder="passthrough",
+    )
+
+    bundled_pipeline = imbpipeline(
+        steps=[
+            ("preprocessor", preprocessor),
+            ("smote", SMOTE(random_state=42)),
+            ("scaler", MinMaxScaler()),
+            ("model", model),
+        ]
+    )
+
+    return bundled_pipeline
