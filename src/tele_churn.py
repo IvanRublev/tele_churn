@@ -67,8 +67,8 @@ def tele_churn_app():
     # Explore Dataset
     st.header("📚 Dataset")
 
-    st.markdown("""
-                As an example, we use the Customer Churn Prediction dataset of 4250 records.
+    st.markdown(f"""
+                As an example, we use the following dataset of {INTEGER_FORMAT.format(4250)} records.
                 > Kostas Diamantaras. (2020). Customer Churn Prediction 2020. Kaggle. https://kaggle.com/competitions/customer-churn-prediction-2020.
                 """)
 
@@ -80,20 +80,32 @@ def tele_churn_app():
     df = _sort_columns(_load_dataset())
 
     with csv_tab:
-        st.dataframe(df, hide_index=True)
+        st.dataframe(df, hide_index=False)
 
     # Churn stats
     churn_counts = _churn_counts(df)
 
     with churn_stats:
-        fig = px.pie(churn_counts, values="count", names=churn_counts.index, title="Churn Counts")
+        churn_totals_str = INTEGER_FORMAT.format(churn_counts.sum())
+        fig = px.pie(
+            churn_counts,
+            values="count",
+            names=churn_counts.index,
+            title=f"Churn proportion ({churn_totals_str} records)",
+        )
+        fig.update_traces(
+            textinfo="label+percent",
+            hovertemplate=f"Churn=%{{label}}<br>Count=%{{value:{INTEGER_GROUPING_SYMBOL}}}",
+        )
+
+        # fig.update_yaxes(tickformat=INTEGER_GROUPING_SYMBOL)
         st.plotly_chart(fig, use_container_width=True)
 
     # Engineer features
     df = _sort_columns(_engineer_features(df))
 
     with engineered_features_tab:
-        st.dataframe(df, hide_index=True)
+        st.dataframe(df, hide_index=False)
 
     # Correlations
     correlations = _correlations(df, closeness_interval=0.0001)
@@ -135,7 +147,7 @@ def tele_churn_app():
             x="Dataset",
             y="Count",
             color="Churn",
-            title="Split to Train and Test Datasets",
+            title="X records split to Train and Test Datasets",
             barmode="stack",
             hover_data=["Dataset", "Churn", "Percentage"],
         )
@@ -144,16 +156,16 @@ def tele_churn_app():
 
     with train_col:
         train_len_str = INTEGER_FORMAT.format(len(train_Xy))
-        st.subheader(f"Train Set ({train_len_str} records)")
+        st.subheader(f"Train Dataset with churn ({train_len_str} records)")
         st.dataframe(train_Xy, hide_index=False)
 
     with test_col:
         test_len_str = INTEGER_FORMAT.format(len(test_Xy))
-        st.subheader(f"Test Set ({test_len_str} records)")
+        st.subheader(f"Test Dataset with churn ({test_len_str} records)")
         st.dataframe(test_Xy, hide_index=False)
 
     st.markdown("""
-            In the pipeline we use the following to preprocess the input dataset:
+            In the pipeline we use the following to preprocess the input:
             * [SimpleImputer][SimpleImputer] to fill missing values
             * [OneHotEncoder][OneHotEncoder] to encode categorical features with automatic categories detection
             * [SMOTE][SMOTE] to balance the dataset
