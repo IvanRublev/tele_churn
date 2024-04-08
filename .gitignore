@@ -48,3 +48,5 @@ build/
 # Environment variables
 .envrc
 
+# Model temporary data
+/catboost_info

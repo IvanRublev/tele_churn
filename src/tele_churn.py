@@ -192,9 +192,13 @@ def tele_churn_app():
                 [accuracy score]: https://scikit-learn.org/stable/modules/generated/sklearn.metrics.accuracy_score.html#sklearn.metrics.accuracy_score
                 """)
 
-    metrics = _metrics_by_model(X_train, y_train)
+    progress_text = "Evaluating models. Please wait."
+    evaluate_bar = st.progress(0, text=progress_text)
+    metrics = _metrics_by_model(X_train, y_train, lambda percent: evaluate_bar.progress(percent, text=progress_text))
+    evaluate_bar.empty()
+
     metrics = metrics.sort_values(by="accuracy", ascending=False)
-    metrics = metrics["accuracy"].apply(lambda x: PERCENTAGE_FORMAT.format(x))
+    metrics["accuracy"].apply(lambda x: PERCENTAGE_FORMAT.format(x))
 
     st.dataframe(metrics, hide_index=True)
 
@@ -301,13 +305,14 @@ def _split_dataset(X, y):
 
 
 @st.cache_data
-def _metrics_by_model(X, y):
+def _metrics_by_model(X, y, _progress_callback):
     """Test a range of classifiers and return their performance metrics on training data.
 
     Args:
         X (object): Pandas dataframe containing X_train data.
         y (object): Pandas dataframe containing y_train data.
-        pipeline (object): Pipeline steps().
+        _progress_callback: Progress function to be called with a 0.0-1.0 percentage during the calculation.
+            Its underscored to avoid consideration during caching.
 
     Return:
         df (object): Pandas dataframe containing model performance data.
@@ -403,6 +408,7 @@ def _metrics_by_model(X, y):
         }
 
         df_models = pd.concat([df_models, pd.Series(row).to_frame().T], ignore_index=True)
+        _progress_callback(len(df_models) / len(classifiers))
 
     return df_models
 
