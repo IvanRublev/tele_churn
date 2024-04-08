@@ -30,3 +30,5 @@ Makefile
 # Fly.io
 fly.toml
 
+# Model temporary data
+/catboost_info
