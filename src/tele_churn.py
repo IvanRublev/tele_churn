@@ -1,4 +1,4 @@
-# import time
+import time
 
 import pandas as pd
 import plotly.express as px
@@ -7,45 +7,45 @@ import plotly.express as px
 # import seaborn as sns
 # import matplotlib.pyplot as plt
 
-# from catboost import CatBoostClassifier
+from catboost import CatBoostClassifier
 from imblearn.over_sampling import SMOTE
 from imblearn.pipeline import Pipeline as imbpipeline
-
-# from lightgbm import LGBMClassifier
+from lightgbm import LGBMClassifier
 from sklearn.compose import ColumnTransformer
-
-# from sklearn.dummy import DummyClassifier
-# from sklearn.ensemble import AdaBoostClassifier
-# from sklearn.ensemble import BaggingClassifier
-# from sklearn.ensemble import ExtraTreesClassifier
-# from sklearn.ensemble import RandomForestClassifier
-# from sklearn.ensemble import VotingClassifier
+from sklearn.dummy import DummyClassifier
+from sklearn.ensemble import AdaBoostClassifier
+from sklearn.ensemble import BaggingClassifier
+from sklearn.ensemble import ExtraTreesClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import VotingClassifier
 from sklearn.impute import SimpleImputer
+from sklearn.linear_model import RidgeClassifier
+from sklearn.linear_model import SGDClassifier
 
-# from sklearn.linear_model import RidgeClassifier
-# from sklearn.linear_model import SGDClassifier
 # from sklearn.metrics import accuracy_score
 # from sklearn.metrics import classification_report
 # from sklearn.metrics import confusion_matrix
 # from sklearn.metrics import f1_score
 # from sklearn.metrics import roc_auc_score
-# from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import cross_val_score
+
 # from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import train_test_split
 
-# from sklearn.naive_bayes import BernoulliNB
-# from sklearn.neighbors import KNeighborsClassifier
+from sklearn.naive_bayes import BernoulliNB
+from sklearn.neighbors import KNeighborsClassifier
+
 # from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.preprocessing import OneHotEncoder
 
 # from sklearn.preprocessing import OrdinalEncoder
 # from sklearn.preprocessing import StandardScaler
-# from sklearn.svm import SVC
-# from sklearn.tree import DecisionTreeClassifier
-# from sklearn.tree import ExtraTreeClassifier
+from sklearn.svm import SVC
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.tree import ExtraTreeClassifier
 import streamlit as st
-# from xgboost import XGBClassifier
+from xgboost import XGBClassifier
 
 from src.logger import logger
 from src.settings import APP_DESCRIPTION
@@ -53,6 +53,7 @@ from src.settings import DATASET_CSV_PATH
 from src.settings import INTEGER_GROUPING_SYMBOL
 from src.settings import INTEGER_FORMAT
 from src.settings import PERCENTAGE_FORMAT
+from src.settings import MODEL_ACCURACY_FORMAT
 
 
 def tele_churn_app():
@@ -64,6 +65,7 @@ def tele_churn_app():
 
     st.title(icon + " " + APP_DESCRIPTION)
 
+    # =========================================================
     # Explore Dataset
     st.header("📚 Dataset")
 
@@ -133,6 +135,7 @@ def tele_churn_app():
         st.write(f"The following columns were dropped: {dropped_columns_str}")
         st.dataframe(X, hide_index=False)
 
+    # =========================================================
     st.header("⚽ Model Training")
 
     # Split dataset
@@ -176,7 +179,24 @@ def tele_churn_app():
             [SMOTE]: https://imbalanced-learn.org/stable/references/generated/imblearn.over_sampling.SMOTE.html
             [MinMaxScaler]: https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.MinMaxScaler.html
             """)
-    # _normalized_input_pipeline()
+
+    # =========================================================
+    st.header("🧪 Models accuracy")
+
+    st.markdown("""
+                We evaluate the predictions of single models as well as multiple models stacked via `VotingClassifier()`. 
+
+                For evaluation we [cross-validate][cross-validate] the models with 5 K-fold splits of the train data and calculate the [accuracy score][accuracy score].
+
+                [cross-validate]: https://scikit-learn.org/stable/modules/cross_validation.html#cross-validation
+                [accuracy score]: https://scikit-learn.org/stable/modules/generated/sklearn.metrics.accuracy_score.html#sklearn.metrics.accuracy_score
+                """)
+
+    metrics = _metrics_by_model(X_train, y_train)
+    metrics = metrics.sort_values(by="accuracy", ascending=False)
+    metrics = metrics["accuracy"].apply(lambda x: PERCENTAGE_FORMAT.format(x))
+
+    st.dataframe(metrics, hide_index=True)
 
 
 @st.cache_data
@@ -199,9 +219,9 @@ def _churn_counts(df):
 @st.cache_data
 def _engineer_features(df):
     pd.set_option("future.no_silent_downcasting", True)
-    df["churn"] = df["churn"].replace(("yes", "no"), (1, 0))
-    df["international_plan"] = df["international_plan"].replace(("yes", "no"), (1, 0))
-    df["voice_mail_plan"] = df["voice_mail_plan"].replace(("yes", "no"), (1, 0))
+    df["churn"] = df["churn"].replace(("yes", "no"), (1, 0)).astype("int64")
+    df["international_plan"] = df["international_plan"].replace(("yes", "no"), (1, 0)).astype("int64")
+    df["voice_mail_plan"] = df["voice_mail_plan"].replace(("yes", "no"), (1, 0)).astype("int64")
     df["charge_rate_day"] = _call_charge_rate(df, "total_day_minutes", "total_day_charge")
     df["charge_rate_night"] = _call_charge_rate(df, "total_night_minutes", "total_night_charge")
     df["charge_rate_intl"] = _call_charge_rate(df, "total_intl_minutes", "total_intl_charge")
@@ -281,6 +301,112 @@ def _split_dataset(X, y):
 
 
 @st.cache_data
+def _metrics_by_model(X, y):
+    """Test a range of classifiers and return their performance metrics on training data.
+
+    Args:
+        X (object): Pandas dataframe containing X_train data.
+        y (object): Pandas dataframe containing y_train data.
+        pipeline (object): Pipeline steps().
+
+    Return:
+        df (object): Pandas dataframe containing model performance data.
+    """
+
+    classifiers = {}
+    classifiers.update({"DummyClassifier": DummyClassifier(strategy="most_frequent")})
+    classifiers.update(
+        {
+            "XGBClassifier": XGBClassifier(
+                use_label_encoder=False,
+                eval_metric="logloss",
+                objective="binary:logistic",
+            )
+        }
+    )
+    classifiers.update({"LGBMClassifier": LGBMClassifier()})
+    classifiers.update({"RandomForestClassifier": RandomForestClassifier()})
+    classifiers.update({"DecisionTreeClassifier": DecisionTreeClassifier()})
+    classifiers.update({"ExtraTreeClassifier": ExtraTreeClassifier()})
+    classifiers.update({"ExtraTreesClassifier": ExtraTreeClassifier()})
+    classifiers.update({"AdaBoostClassifier": AdaBoostClassifier()})
+    classifiers.update({"KNeighborsClassifier": KNeighborsClassifier()})
+    classifiers.update({"RidgeClassifier": RidgeClassifier()})
+    classifiers.update({"SGDClassifier": SGDClassifier()})
+    classifiers.update({"BaggingClassifier": BaggingClassifier()})
+    classifiers.update({"BernoulliNB": BernoulliNB()})
+    classifiers.update({"SVC": SVC()})
+    classifiers.update({"CatBoostClassifier": CatBoostClassifier(silent=True)})
+
+    # Stacking
+    models = []
+
+    models = []
+    models.append(
+        ("XGBClassifier", XGBClassifier(use_label_encoder=False, eval_metric="logloss", objective="binary:logistic"))
+    )
+    models.append(("CatBoostClassifier", CatBoostClassifier(silent=True)))
+    models.append(("BaggingClassifier", BaggingClassifier()))
+    classifiers.update(
+        {"VotingClassifier (XGBClassifier, CatBoostClassifier, BaggingClassifier)": VotingClassifier(models)}
+    )
+
+    models = []
+    models.append(
+        ("XGBClassifier", XGBClassifier(use_label_encoder=False, eval_metric="logloss", objective="binary:logistic"))
+    )
+    models.append(("LGBMClassifier", LGBMClassifier()))
+    models.append(("CatBoostClassifier", CatBoostClassifier(silent=True)))
+    classifiers.update(
+        {"VotingClassifier (XGBClassifier, LGBMClassifier, CatBoostClassifier)": VotingClassifier(models)}
+    )
+
+    models = []
+    models.append(
+        ("XGBClassifier", XGBClassifier(use_label_encoder=False, eval_metric="logloss", objective="binary:logistic"))
+    )
+    models.append(("RandomForestClassifier", RandomForestClassifier()))
+    models.append(("DecisionTreeClassifier", DecisionTreeClassifier()))
+    classifiers.update(
+        {"VotingClassifier (XGBClassifier, RandomForestClassifier, DecisionTreeClassifier)": VotingClassifier(models)}
+    )
+
+    models = []
+    models.append(
+        ("XGBClassifier", XGBClassifier(use_label_encoder=False, eval_metric="logloss", objective="binary:logistic"))
+    )
+    models.append(("AdaBoostClassifier", AdaBoostClassifier()))
+    models.append(("ExtraTreeClassifier", ExtraTreeClassifier()))
+    classifiers.update(
+        {"VotingClassifier (XGBClassifier, AdaBoostClassifier, ExtraTreeClassifier)": VotingClassifier(models)}
+    )
+
+    models = []
+    models.append(
+        ("XGBClassifier", XGBClassifier(use_label_encoder=False, eval_metric="logloss", objective="binary:logistic"))
+    )
+    models.append(("ExtraTreesClassifier", ExtraTreesClassifier()))
+    classifiers.update({"VotingClassifier (XGBClassifier, ExtraTreesClassifier)": VotingClassifier(models)})
+
+    df_models = pd.DataFrame(columns=["model", "run_time", "accuracy"])
+
+    for key in classifiers:
+        start_time = time.time()
+
+        pipeline = _normalized_input_pipeline(X, classifiers[key])
+        cv = cross_val_score(pipeline, X, y, cv=5, scoring="accuracy")
+
+        row = {
+            "model": key,
+            "run_time": format(round((time.time() - start_time) / 60, 2)),
+            "accuracy": cv.mean(),
+        }
+
+        df_models = pd.concat([df_models, pd.Series(row).to_frame().T], ignore_index=True)
+
+    return df_models
+
+
 def _normalized_input_pipeline(X, model):
     """Return a pipeline to normalize numerical and categorical data bundled together with a given model.
 
