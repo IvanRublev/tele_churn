@@ -20,6 +20,7 @@ DATASET_CSV_PATH: str = "dataset/customer_churn_prediction_2020_train.csv"
 INTEGER_GROUPING_SYMBOL = ","
 INTEGER_FORMAT = f"{{:{INTEGER_GROUPING_SYMBOL}d}}"
 PERCENTAGE_FORMAT = "{:.2f}%"
+PROCESSING_TIME_FORMAT = "{:.2f}"
 MODEL_ACCURACY_FORMAT = "{:.3f}"
 
 # From pyproject.toml

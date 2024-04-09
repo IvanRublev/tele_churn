@@ -52,6 +52,7 @@ from src.settings import APP_DESCRIPTION
 from src.settings import DATASET_CSV_PATH
 from src.settings import INTEGER_GROUPING_SYMBOL
 from src.settings import INTEGER_FORMAT
+from src.settings import PROCESSING_TIME_FORMAT
 from src.settings import PERCENTAGE_FORMAT
 from src.settings import MODEL_ACCURACY_FORMAT
 
@@ -184,9 +185,11 @@ def tele_churn_app():
     st.header("🧪 Models accuracy")
 
     st.markdown("""
-                We evaluate the predictions of single models as well as multiple models stacked via `VotingClassifier()`. 
+                We evaluate the predictions of single models as well as multiple models
+                stacked via `VotingClassifier()`. 
 
-                For evaluation we [cross-validate][cross-validate] the models with 5 K-fold splits of the train data and calculate the [accuracy score][accuracy score].
+                For evaluation we [cross-validate][cross-validate] the models with 5 K-fold splits of the train data
+                and calculate the [accuracy score][accuracy score].
 
                 [cross-validate]: https://scikit-learn.org/stable/modules/cross_validation.html#cross-validation
                 [accuracy score]: https://scikit-learn.org/stable/modules/generated/sklearn.metrics.accuracy_score.html#sklearn.metrics.accuracy_score
@@ -195,7 +198,8 @@ def tele_churn_app():
     metrics = _metrics_by_model(X_train, y_train)
 
     metrics = metrics.sort_values(by="accuracy", ascending=False)
-    metrics["accuracy"].apply(lambda x: PERCENTAGE_FORMAT.format(x))
+    metrics["accuracy"] = metrics["accuracy"].apply(lambda x: MODEL_ACCURACY_FORMAT.format(x))
+    metrics["run_time"] = metrics["run_time"].apply(lambda x: PROCESSING_TIME_FORMAT.format(x))
 
     st.dataframe(metrics, hide_index=True)
 
@@ -398,7 +402,7 @@ def _metrics_by_model(X, y):
 
         row = {
             "model": key,
-            "run_time": format(round((time.time() - start_time) / 60, 2)),
+            "run_time": round((time.time() - start_time) / 60, 2),
             "accuracy": cv.mean(),
         }
 
