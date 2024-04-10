@@ -2,11 +2,7 @@ import time
 
 import pandas as pd
 import plotly.express as px
-# import itertools
-# import numpy as np
-# import seaborn as sns
-# import matplotlib.pyplot as plt
-
+import streamlit as st
 from catboost import CatBoostClassifier
 from imblearn.over_sampling import SMOTE
 from imblearn.pipeline import Pipeline as imbpipeline
@@ -21,30 +17,19 @@ from sklearn.ensemble import VotingClassifier
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import RidgeClassifier
 from sklearn.linear_model import SGDClassifier
-
-# from sklearn.metrics import accuracy_score
-# from sklearn.metrics import classification_report
-# from sklearn.metrics import confusion_matrix
-# from sklearn.metrics import f1_score
-# from sklearn.metrics import roc_auc_score
+from sklearn.metrics import auc
+from sklearn.metrics import classification_report
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import precision_recall_curve
 from sklearn.model_selection import cross_val_score
-
-# from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import train_test_split
-
 from sklearn.naive_bayes import BernoulliNB
 from sklearn.neighbors import KNeighborsClassifier
-
-# from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.preprocessing import OneHotEncoder
-
-# from sklearn.preprocessing import OrdinalEncoder
-# from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.tree import ExtraTreeClassifier
-import streamlit as st
 from xgboost import XGBClassifier
 
 from src.logger import logger
@@ -52,9 +37,9 @@ from src.settings import APP_DESCRIPTION
 from src.settings import DATASET_CSV_PATH
 from src.settings import INTEGER_GROUPING_SYMBOL
 from src.settings import INTEGER_FORMAT
-from src.settings import PROCESSING_TIME_FORMAT
-from src.settings import PERCENTAGE_FORMAT
 from src.settings import MODEL_ACCURACY_FORMAT
+from src.settings import PERCENTAGE_FORMAT
+from src.settings import PROCESSING_TIME_FORMAT
 
 
 def tele_churn_app():
@@ -205,6 +190,49 @@ def tele_churn_app():
 
     # =========================================================
     st.header("📈 Model Evaluation")
+
+    st.write("We've chosen the `LGBMClassifier` model and are using the Test Dataset for evaluation.")
+
+    # train model
+    model = LGBMClassifier()
+    pipeline = _normalized_input_pipeline(X_train, model)
+    pipeline.fit(X_train, list(y_train))
+
+    pc_col, report_col, conf_matrix = st.columns(3)
+
+    y_test = list(y_test)
+
+    with pc_col:
+        # calculate model precision-recall curve
+        pr_f, auc_score = _precision_recall_curve(pipeline, X_test, y_test)
+        fig = px.line(
+            pr_f,
+            x="Recall",
+            y="Precision",
+            title=f"Precision-Recall Curve (AUC Score={MODEL_ACCURACY_FORMAT.format(auc_score)})",
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    with report_col:
+        predicted = pipeline.predict(X_test)
+        report = classification_report(y_test, predicted)
+        st.subheader("Classification report")
+        st.markdown(f"""
+                    ```
+                    .{report}
+```""")
+
+    with conf_matrix:
+        st.subheader("Confusion Matrix")
+        matrix = confusion_matrix(y_test, predicted)
+        df_cm = pd.DataFrame(
+            matrix, columns=["Predicted Negative", "Predicted Positive"], index=["Actual Negative", "Actual Positive"]
+        )
+        st.dataframe(df_cm, hide_index=False)
+
+        df_cm_percent = df_cm / df_cm.values.sum() * 100
+        df_cm_percent = df_cm_percent.applymap(lambda x: PERCENTAGE_FORMAT.format(x))
+        st.dataframe(df_cm_percent, hide_index=False)
 
 
 @st.cache_data
@@ -405,7 +433,7 @@ def _metrics_by_model(X, y):
 
         row = {
             "model": key,
-            "calculation seconds": round((time.time() - start_time) / 60, 2),
+            "calculation seconds": time.time() - start_time,
             "accuracy": cv.mean(),
         }
 
@@ -448,3 +476,20 @@ def _normalized_input_pipeline(X, model):
     )
 
     return bundled_pipeline
+
+
+# @st.cache_data
+def _precision_recall_curve(_model, X_test, y_test):
+    # retrieve probabilities for the positive class
+    yhat = _model.predict_proba(X_test)
+    pos_probs = yhat[:, 1]
+
+    # calculate model precision-recall curve
+    precision, recall, _ = precision_recall_curve(y_test, pos_probs)
+
+    df = pd.DataFrame({"Precision": precision, "Recall": recall})
+    df = df.sort_values(by="Recall")
+
+    auc_score = auc(recall, precision)
+
+    return df, auc_score
