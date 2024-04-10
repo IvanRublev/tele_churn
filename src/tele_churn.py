@@ -182,14 +182,14 @@ def tele_churn_app():
             """)
 
     # =========================================================
-    st.header("🧪 Models accuracy")
+    st.header("🧪 Model choice")
 
     st.markdown("""
-                We evaluate the predictions of single models as well as multiple models
-                stacked via `VotingClassifier()`. 
+                We select a best performing model from both single models 
+                and multiple models stacked via `VotingClassifier()` by accuracy score. 
 
-                For evaluation we [cross-validate][cross-validate] the models with 5 K-fold splits of the train data
-                and calculate the [accuracy score][accuracy score].
+                To calculate the [accuracy score][accuracy score], we [cross-validate][cross-validate] 
+                the models with 5 K-fold splitting of the training data.
 
                 [cross-validate]: https://scikit-learn.org/stable/modules/cross_validation.html#cross-validation
                 [accuracy score]: https://scikit-learn.org/stable/modules/generated/sklearn.metrics.accuracy_score.html#sklearn.metrics.accuracy_score
@@ -199,9 +199,12 @@ def tele_churn_app():
 
     metrics = metrics.sort_values(by="accuracy", ascending=False)
     metrics["accuracy"] = metrics["accuracy"].apply(lambda x: MODEL_ACCURACY_FORMAT.format(x))
-    metrics["run_time"] = metrics["run_time"].apply(lambda x: PROCESSING_TIME_FORMAT.format(x))
+    metrics["calculation seconds"] = metrics["calculation seconds"].apply(lambda x: PROCESSING_TIME_FORMAT.format(x))
 
     st.dataframe(metrics, hide_index=True)
+
+    # =========================================================
+    st.header("📈 Model Evaluation")
 
 
 @st.cache_data
@@ -392,7 +395,7 @@ def _metrics_by_model(X, y):
     models.append(("ExtraTreesClassifier", ExtraTreesClassifier()))
     classifiers.update({"VotingClassifier (XGBClassifier, ExtraTreesClassifier)": VotingClassifier(models)})
 
-    df_models = pd.DataFrame(columns=["model", "run_time", "accuracy"])
+    df_models = pd.DataFrame(columns=["model", "calculation seconds", "accuracy"])
 
     for key in classifiers:
         start_time = time.time()
@@ -402,7 +405,7 @@ def _metrics_by_model(X, y):
 
         row = {
             "model": key,
-            "run_time": round((time.time() - start_time) / 60, 2),
+            "calculation seconds": round((time.time() - start_time) / 60, 2),
             "accuracy": cv.mean(),
         }
 
