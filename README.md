@@ -1,4 +1,4 @@
-# Customer Trends
+# Churn analysis for a telecom operator
 
 You can play with the dashboard on https://tele-churn.fly.dev/
 
