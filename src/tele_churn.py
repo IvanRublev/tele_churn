@@ -51,6 +51,11 @@ def tele_churn_app():
 
     st.title(icon + " " + APP_DESCRIPTION)
 
+    st.markdown("""
+                This sample project was created by Ivan Rublev in 2024. 
+                You can find the complete source code on [GitHub](https://github.com/IvanRublev/tele_churn).
+                """)
+
     # =========================================================
     # Explore Dataset
     st.header("📚 Dataset")
